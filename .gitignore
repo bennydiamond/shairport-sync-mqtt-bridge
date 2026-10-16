@@ -1,6 +1,7 @@
 # Environment & secrets
 .env
 *.env
+!version.env
 mosquitto/config/passwd
 mosquitto/config/mosquitto.conf
 mosquitto/data/
