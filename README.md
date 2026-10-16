@@ -24,12 +24,25 @@ This container solves both problems in a single self-contained image (`dbus-daem
 
 ---
 
-## Multi-Arch Docker Image
+## Multi-Arch Docker Image & Versioning
 
-GitHub Actions automatically builds and publishes multi-arch images (`linux/amd64` and `linux/arm64`) to GitHub Container Registry:
+This repository tracks upstream tagged releases of [`mikebrady/shairport-sync`](https://hub.docker.com/r/mikebrady/shairport-sync/tags) alongside a local `BUILD_INDEX` in [`version.env`](version.env):
+
+```ini
+SHAIRPORT_VERSION=5.6
+BUILD_INDEX=1
+```
+
+- **Automatic Upstream Tracking**: The GitHub Actions workflow checks daily (`cron: '0 6 * * *'`) for new upstream `mikebrady/shairport-sync` releases on GitHub and Docker Hub. When a new release (e.g., `5.7`) appears, it automatically updates `version.env` and `Dockerfile`, resets `BUILD_INDEX=1`, and publishes `5.7-1`.
+- **Local Iteration (`BUILD_INDEX`)**: Whenever you push changes to this repo (or manually bump `BUILD_INDEX` in `version.env`), the workflow builds against the pinned `SHAIRPORT_VERSION` and auto-increments `BUILD_INDEX` (`5.6-1` $\rightarrow$ `5.6-2`), creating a matching Git tag and GitHub Release (`v5.6-2`).
 
 ```bash
+# Pull latest
 docker pull ghcr.io/bennydiamond/shairport-sync-mqtt-bridge:latest
+
+# Or pin to a specific Shairport-Sync version / build index
+docker pull ghcr.io/bennydiamond/shairport-sync-mqtt-bridge:5.6-1
+docker pull ghcr.io/bennydiamond/shairport-sync-mqtt-bridge:5.6
 ```
 
 ---

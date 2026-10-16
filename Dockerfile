@@ -1,4 +1,11 @@
-FROM mikebrady/shairport-sync:latest
+ARG SHAIRPORT_VERSION=5.6
+FROM mikebrady/shairport-sync:${SHAIRPORT_VERSION}
+
+ARG SHAIRPORT_VERSION=5.6
+ARG BUILD_INDEX=1
+LABEL org.opencontainers.image.version="${SHAIRPORT_VERSION}-${BUILD_INDEX}" \
+      io.shairport-sync.base-version="${SHAIRPORT_VERSION}" \
+      io.shairport-sync.build-index="${BUILD_INDEX}"
 
 RUN apk add --no-cache \
         python3 \

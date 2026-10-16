@@ -5,13 +5,23 @@ on:
     branches:
       - main
       - master
-    tags:
-      - 'v*'
+  schedule:
+    # Check daily at 06:00 UTC for new upstream mikebrady/shairport-sync tagged releases
+    - cron: '0 6 * * *'
   pull_request:
     branches:
       - main
       - master
   workflow_dispatch:
+    inputs:
+      shairport_version:
+        description: 'Optional override for upstream Shairport-Sync tag (leave empty to auto-detect)'
+        required: false
+        default: ''
+      build_index:
+        description: 'Optional override for BUILD_INDEX (leave empty to use/auto-increment version.env)'
+        required: false
+        default: ''
 
 env:
   REGISTRY: ghcr.io
@@ -19,48 +29,151 @@ env:
 
 jobs:
   build-and-push:
+    # Skip if commit message contains [skip ci]
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve Shairport-Sync version and Build Index
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_SHAIRPORT_VERSION: ${{ github.event.inputs.shairport_version }}
+          INPUT_BUILD_INDEX: ${{ github.event.inputs.build_index }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -e
+          source ./version.env
+          CURRENT_VER="${SHAIRPORT_VERSION}"
+          CURRENT_IDX="${BUILD_INDEX}"
+
+          echo "Current repo version.env: SHAIRPORT_VERSION=${CURRENT_VER}, BUILD_INDEX=${CURRENT_IDX}"
+
+          # Query latest upstream release tag from mikebrady/shairport-sync
+          UPSTREAM_VER=$(gh api repos/mikebrady/shairport-sync/releases/latest --jq '.tag_name' | sed 's/^v//')
+          echo "Latest upstream GitHub release: ${UPSTREAM_VER}"
+
+          # Verify the tag exists on Docker Hub (mikebrady/shairport-sync:<tag>)
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://hub.docker.com/v2/repositories/mikebrady/shairport-sync/tags/${UPSTREAM_VER}/")
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Warning: mikebrady/shairport-sync:${UPSTREAM_VER} not yet available on Docker Hub (HTTP ${HTTP_CODE}). Keeping ${CURRENT_VER}."
+            UPSTREAM_VER="${CURRENT_VER}"
+          fi
+
+          # Apply manual workflow_dispatch overrides if provided
+          if [ -n "$INPUT_SHAIRPORT_VERSION" ]; then
+            TARGET_VER="$INPUT_SHAIRPORT_VERSION"
+          else
+            TARGET_VER="$UPSTREAM_VER"
+          fi
+
+          # On scheduled runs, only build if upstream Shairport-Sync version changed
+          if [ "$EVENT_NAME" = "schedule" ] && [ "$TARGET_VER" = "$CURRENT_VER" ]; then
+            echo "Already synced with latest upstream Shairport-Sync ${CURRENT_VER}. No rebuild needed."
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          VERSION_CHANGED="false"
+          if [ "$TARGET_VER" != "$CURRENT_VER" ]; then
+            echo "New upstream Shairport-Sync version detected: ${CURRENT_VER} -> ${TARGET_VER}"
+            TARGET_IDX="${INPUT_BUILD_INDEX:-1}"
+            VERSION_CHANGED="true"
+          else
+            if [ -n "$INPUT_BUILD_INDEX" ]; then
+              TARGET_IDX="$INPUT_BUILD_INDEX"
+            else
+              TARGET_IDX="$CURRENT_IDX"
+              # If tag v<ver>-<idx> already exists in git, auto-increment BUILD_INDEX
+              while git rev-parse "v${TARGET_VER}-${TARGET_IDX}" >/dev/null 2>&1; do
+                TARGET_IDX=$((TARGET_IDX + 1))
+                VERSION_CHANGED="true"
+              done
+            fi
+          fi
+
+          # Persist updated version.env and Dockerfile if changed on main branch
+          if [ "$EVENT_NAME" != "pull_request" ] && { [ "$TARGET_VER" != "$CURRENT_VER" ] || [ "$TARGET_IDX" != "$CURRENT_IDX" ]; }; then
+            cat > version.env <<EOF
+          SHAIRPORT_VERSION=${TARGET_VER}
+          BUILD_INDEX=${TARGET_IDX}
+          EOF
+            sed -i "s/^ARG SHAIRPORT_VERSION=.*/ARG SHAIRPORT_VERSION=${TARGET_VER}/" Dockerfile
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add version.env Dockerfile
+            git commit -m "chore: release ${TARGET_VER}-${TARGET_IDX} [skip ci]"
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
+
+          FULL_VERSION="${TARGET_VER}-${TARGET_IDX}"
+          echo "Resolved build version: ${FULL_VERSION} (base=${TARGET_VER}, index=${TARGET_IDX})"
+          echo "should_build=true" >> "$GITHUB_OUTPUT"
+          echo "shairport_version=${TARGET_VER}" >> "$GITHUB_OUTPUT"
+          echo "build_index=${TARGET_IDX}" >> "$GITHUB_OUTPUT"
+          echo "full_version=${FULL_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU for multi-arch builds
+        if: steps.version.outputs.should_build == 'true'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
+        if: steps.version.outputs.should_build == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
+        if: steps.version.outputs.should_build == 'true' && github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Docker metadata (tags, labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-
       - name: Build and push Docker image (linux/amd64, linux/arm64)
+        if: steps.version.outputs.should_build == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            SHAIRPORT_VERSION=${{ steps.version.outputs.shairport_version }}
+            BUILD_INDEX=${{ steps.version.outputs.build_index }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.full_version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ steps.version.outputs.full_version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.shairport_version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Create Git Tag and GitHub Release
+        if: steps.version.outputs.should_build == 'true' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v${{ steps.version.outputs.full_version }}
+          BASE_VER: ${{ steps.version.outputs.shairport_version }}
+          BUILD_IDX: ${{ steps.version.outputs.build_index }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -fa "$TAG" -m "Release $TAG (Shairport-Sync ${BASE_VER}, build ${BUILD_IDX})"
+          git push origin "$TAG" --force
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "$TAG (Shairport-Sync ${BASE_VER}, Build ${BUILD_IDX})" \
+              --notes "Multi-arch (\`linux/amd64\`, \`linux/arm64\`) image built on \`mikebrady/shairport-sync:${BASE_VER}\` (build index \`${BUILD_IDX}\`).
+
+          ### Docker Pull Tags
+          - \`ghcr.io/${{ github.repository }}:${BASE_VER}-${BUILD_IDX}\`
+          - \`ghcr.io/${{ github.repository }}:${BASE_VER}\`
+          - \`ghcr.io/${{ github.repository }}:latest\`"
+          fi
