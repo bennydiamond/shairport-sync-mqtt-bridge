@@ -90,7 +90,9 @@ When running inside a Proxmox LXC container (e.g. `atelier-audio` with Intel PCH
 
 ## Home Assistant Universal Media Player (UMP) Example
 
-With `VOLUME_SCALE=0_to_100` (default), the MQTT `number` entity operates on the standard `0..100` scale (ideal for direct integration with ESPHome LVGL touch displays and hardware sliders). In Home Assistant's Universal Media Player, the `volume_level` attribute template normalizes to `0.00..1.00`, and `volume_set` scales back to `0..100`:
+With `VOLUME_SCALE=0_to_100` (default), the MQTT `number` entity operates on the standard `0..100` scale (ideal for direct integration with ESPHome LVGL touch displays and hardware sliders).
+
+The bridge also publishes a normalized `volume_level` (`0.00..1.00` float) as an entity attribute on the number entity (`json_attributes_topic`), allowing Home Assistant's Universal Media Player to track volume natively using `entity_id|attribute` syntax without requiring external template helper sensors:
 
 ```yaml
 - platform: universal
@@ -130,5 +132,5 @@ With `VOLUME_SCALE=0_to_100` (default), the MQTT `number` entity operates on the
         value: "{{ (volume_level * 100) | round | int }}"
   attributes:
     is_volume_muted: switch.atelier_alsa_audio_atelier_alsa_audio_mute
-    volume_level: "{{ states('number.atelier_alsa_audio_atelier_alsa_audio_volume') | float(0) / 100.0 }}"
+    volume_level: number.atelier_alsa_audio_atelier_alsa_audio_volume|volume_level
 ```

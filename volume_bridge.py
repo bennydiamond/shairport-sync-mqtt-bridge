@@ -9,6 +9,7 @@ Supports both:
 Preserves volume level across mute/unmute and keeps ALSA, Shairport-Sync D-Bus, and Home Assistant MQTT
 synchronized in real time.
 """
+import json
 import logging
 import logging.handlers
 import os
@@ -270,8 +271,13 @@ class VolumeBridge:
             return
         vol_payload = self._format_mqtt_volume(self.current_volume_pct)
         mute_payload = "ON" if self.is_muted else "OFF"
+        attr_payload = json.dumps({
+            "volume_level": round(self.current_volume_pct / 100.0, 2),
+            "volume_pct": self.current_volume_pct,
+        })
         self.mqtt_client.publish(VOL_STATE_TOPIC, vol_payload, qos=1, retain=True)
         self.mqtt_client.publish(MUTE_STATE_TOPIC, mute_payload, qos=1, retain=True)
+        self.mqtt_client.publish(f"{BASE_TOPIC}/{DEVICE_ID}/attributes", attr_payload, qos=1, retain=True)
         logger.info(
             f"Published MQTT state: volume={vol_payload} ({self.current_volume_pct}%), "
             f"mute={mute_payload} (saved={self.saved_volume_pct}%)"
@@ -376,6 +382,7 @@ def publish_discovery(client: mqtt.Client):
         "unique_id": f"{DEVICE_ID}_volume",
         "state_topic": VOL_STATE_TOPIC,
         "command_topic": VOL_CMD_TOPIC,
+        "json_attributes_topic": f"{BASE_TOPIC}/{DEVICE_ID}/attributes",
         "availability_topic": AVAILABILITY_TOPIC,
         "min": min_val,
         "max": max_val,
