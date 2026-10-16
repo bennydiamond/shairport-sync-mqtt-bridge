@@ -2,6 +2,7 @@ general =
 {
     name = "${AIRPLAY_NAME}";
     output_backend = "alsa";
+    ignore_volume_control = "${IGNORE_VOLUME_CONTROL}";
     volume_range_db = ${VOLUME_RANGE_DB};
     dbus_service_bus = "system";
 };

@@ -14,6 +14,7 @@ export MQTT_DISCOVERY_PREFIX="${MQTT_DISCOVERY_PREFIX:-homeassistant}"
 export MQTT_TOPIC_PREFIX="${MQTT_TOPIC_PREFIX:-garage_audio/}"
 export SHAIRPORT_MQTT_TOPIC="${SHAIRPORT_MQTT_TOPIC:-${MQTT_TOPIC_PREFIX%/}/shairport}"
 export ENABLE_VOLUME_BRIDGE="${ENABLE_VOLUME_BRIDGE:-true}"
+export IGNORE_VOLUME_CONTROL="${IGNORE_VOLUME_CONTROL:-yes}"
 
 # Auto-detect whether the ALSA control has hardware mute (`pswitch`) if USE_HARDWARE_MIXER=auto
 if [ "$USE_HARDWARE_MIXER" = "auto" ]; then
@@ -35,7 +36,7 @@ fi
 
 # Render /etc/shairport-sync.conf unless a custom config is mounted with USE_CUSTOM_CONFIG=true
 if [ "${USE_CUSTOM_CONFIG:-false}" != "true" ] && [ -f /etc/shairport-sync.conf.template ]; then
-    envsubst '${AIRPLAY_NAME} ${VOLUME_RANGE_DB} ${ALSA_OUTPUT_DEVICE} ${ALSA_MIXER_BLOCK} ${MQTT_HOST} ${MQTT_PORT} ${MQTT_USER} ${MQTT_PASSWORD} ${SHAIRPORT_MQTT_TOPIC} ${MQTT_DISCOVERY_PREFIX}' \
+    envsubst '${AIRPLAY_NAME} ${IGNORE_VOLUME_CONTROL} ${VOLUME_RANGE_DB} ${ALSA_OUTPUT_DEVICE} ${ALSA_MIXER_BLOCK} ${MQTT_HOST} ${MQTT_PORT} ${MQTT_USER} ${MQTT_PASSWORD} ${SHAIRPORT_MQTT_TOPIC} ${MQTT_DISCOVERY_PREFIX}' \
         < /etc/shairport-sync.conf.template > /etc/shairport-sync.conf
 fi
 
@@ -56,7 +57,7 @@ sleep 1
 nqptp &
 
 # 4. Start Shairport-Sync
-shairport-sync -c /etc/shairport-sync.conf &
+shairport-sync -X -c /etc/shairport-sync.conf &
 SPS_PID=$!
 
 # 5. Start ALSA <-> D-Bus <-> MQTT Volume Bridge (if enabled)

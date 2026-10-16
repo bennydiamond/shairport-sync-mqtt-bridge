@@ -26,6 +26,8 @@ services:
       - mosquitto
     devices:
       - /dev/snd:/dev/snd
+    volumes:
+      - /etc/asound.conf:/etc/asound.conf:ro
     env_file:
       - .env
     tmpfs:

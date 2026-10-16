@@ -134,3 +134,23 @@ The bridge also publishes a normalized `volume_level` (`0.00..1.00` float) as an
     is_volume_muted: switch.atelier_alsa_audio_atelier_alsa_audio_mute
     volume_level: number.atelier_alsa_audio_atelier_alsa_audio_volume|volume_level
 ```
+
+---
+
+## Music Assistant & AirPlay 2 Limitations
+
+When streaming from [Music Assistant](https://music-assistant.io/) to `shairport-sync` (version 4.x and 5.x):
+
+* **The Limitation**: Native AirPlay 2 mode requires bidirectional IEEE 1588 Precision Time Protocol (PTP) clock negotiation over UDP ports 319/320. Music Assistant's underlying AirPlay client (`cliairplay`) enforces strict 2-way delay request/response timestamps. Because `nqptp` in Shairport-Sync handles PTP as a passive timing listener, native AirPlay 2 mode can fail the clock probe handshake, resulting in connection timeouts or silence.
+* **The Solution**: In Music Assistant (`Settings` -> `Players` -> Select your Shairport-Sync player):
+  * Set **Audio Protocol / Mode** to **`AirPlay 2 - compatibility mode`** (or **`AirPlay 1`**).
+  * This bypasses the strict PTP probe check, plays instantly without buffering delays, and still delivers full 16-bit / 44.1 kHz CD-quality lossless ALAC audio.
+
+---
+
+## USB DAC Amplifiers (Woopker X24, Sinilink, & Generic USB Audio)
+
+If using a mini stereo amplifier with a USB input (such as the Woopker X24 TPA3116 or Sinilink XY-AP50H), the USB DAC's internal hardware volume register is prone to discrete step jumps and dynamic compression clipping.
+
+See the complete step-by-step setup guide in [**`USB_AUDIO_SOFTVOL_SETUP.md`**](USB_AUDIO_SOFTVOL_SETUP.md) for instructions on setting up ALSA `softvol` on a fresh Raspberry Pi OS / DietPi install.
+
