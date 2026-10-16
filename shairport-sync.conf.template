@@ -1,0 +1,41 @@
+general =
+{
+    name = "${AIRPLAY_NAME}";
+    output_backend = "alsa";
+    volume_range_db = ${VOLUME_RANGE_DB};
+    dbus_service_bus = "system";
+};
+
+sessioncontrol =
+{
+    allow_session_interruption = "yes";
+    session_timeout = 60;
+};
+
+alsa =
+{
+    output_device = "${ALSA_OUTPUT_DEVICE}";
+${ALSA_MIXER_BLOCK}
+};
+
+metadata =
+{
+    enabled = "yes";
+    include_cover_art = "yes";
+};
+
+mqtt =
+{
+    enabled = "yes";
+    hostname = "${MQTT_HOST}";
+    port = ${MQTT_PORT};
+    username = "${MQTT_USER}";
+    password = "${MQTT_PASSWORD}";
+    topic = "${SHAIRPORT_MQTT_TOPIC}";
+    publish_raw = "yes";
+    publish_parsed = "yes";
+    publish_cover = "yes";
+    enable_autodiscovery = "yes";
+    autodiscovery_prefix = "${MQTT_DISCOVERY_PREFIX}";
+    enable_remote = "yes";
+};

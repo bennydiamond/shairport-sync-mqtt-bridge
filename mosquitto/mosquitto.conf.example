@@ -1,0 +1,25 @@
+# Local broker configuration (RAM-only to protect SD card)
+listener 1883
+allow_anonymous false
+password_file /mosquitto/config/passwd
+
+persistence false
+log_dest stdout
+log_type error
+log_type warning
+log_type notice
+
+# Bridge to Home Assistant main MQTT broker
+connection bridge-to-ha
+address 192.168.0.250:1883
+remote_username garage_audio
+remote_password garage_audio
+topic garage_audio/# both 1 "" ""
+topic homeassistant/# out 1 "" ""
+
+bridge_protocol_version mqttv311
+bridge_insecure false
+try_private false
+cleansession false
+restart_timeout 5
+notifications false

@@ -1,0 +1,39 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./mosquitto/config:/mosquitto/config:ro
+    tmpfs:
+      - /mosquitto/data
+      - /mosquitto/log
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://${SYSLOG_HOST:-192.168.0.15}:${SYSLOG_PORT:-514}"
+        tag: "mosquitto"
+
+  shairport-sync:
+    image: ghcr.io/bennydiamond/shairport-sync-mqtt-bridge:latest
+    build: .
+    container_name: shairport-sync
+    restart: unless-stopped
+    network_mode: host
+    privileged: true
+    depends_on:
+      - mosquitto
+    devices:
+      - /dev/snd:/dev/snd
+    env_file:
+      - .env
+    tmpfs:
+      - /run
+      - /var/run
+      - /tmp
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://${SYSLOG_HOST:-192.168.0.15}:${SYSLOG_PORT:-514}"
+        tag: "shairport-sync"
