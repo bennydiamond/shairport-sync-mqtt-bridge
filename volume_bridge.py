@@ -45,7 +45,7 @@ DEVICE_SW_VERSION = os.getenv("DEVICE_SW_VERSION", "2.0")
 ALSA_CARD = int(os.getenv("ALSA_CARD", "0"))
 ALSA_CONTROL = os.getenv("ALSA_CONTROL", "PCM")
 ALSA_VOLUME_CURVE = os.getenv("ALSA_VOLUME_CURVE", "auto").lower()
-VOLUME_SCALE = os.getenv("VOLUME_SCALE", "0_to_1").lower()  # "0_to_1" (0.00..1.00) or "0_to_100" (0..100)
+VOLUME_SCALE = os.getenv("VOLUME_SCALE", "0_to_100").lower()  # "0_to_100" (0..100) or "0_to_1" (0.00..1.00)
 
 SYSLOG_HOST = os.getenv("SYSLOG_HOST", "").strip()
 SYSLOG_PORT = int(os.getenv("SYSLOG_PORT", "514"))

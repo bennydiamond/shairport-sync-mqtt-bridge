@@ -90,7 +90,7 @@ When running inside a Proxmox LXC container (e.g. `atelier-audio` with Intel PCH
 
 ## Home Assistant Universal Media Player (UMP) Example
 
-Because `VOLUME_SCALE=0_to_1` publishes the MQTT `number` entity directly on Home Assistant's native `0.00` to `1.00` scale, the Universal Media Player configuration needs zero math conversions for `volume_level` or `volume_set`:
+With `VOLUME_SCALE=0_to_100` (default), the MQTT `number` entity operates on the standard `0..100` scale (ideal for direct integration with ESPHome LVGL touch displays and hardware sliders). In Home Assistant's Universal Media Player, the `volume_level` attribute template normalizes to `0.00..1.00`, and `volume_set` scales back to `0..100`:
 
 ```yaml
 - platform: universal
@@ -111,15 +111,15 @@ Because `VOLUME_SCALE=0_to_1` publishes the MQTT `number` entity directly on Hom
       target:
         entity_id: number.atelier_alsa_audio_atelier_alsa_audio_volume
       data:
-        value: "{{ [((states('number.atelier_alsa_audio_atelier_alsa_audio_volume') | float(0)) + 0.07) | round(2), 1.0] | min }}"
+        value: "{{ [100, (states('number.atelier_alsa_audio_atelier_alsa_audio_volume') | int(0) + 7)] | min }}"
     volume_down:
       action: number.set_value
       target:
         entity_id: number.atelier_alsa_audio_atelier_alsa_audio_volume
       data:
-        value: "{{ [((states('number.atelier_alsa_audio_atelier_alsa_audio_volume') | float(0)) - 0.07) | round(2), 0.0] | max }}"
+        value: "{{ [0, (states('number.atelier_alsa_audio_atelier_alsa_audio_volume') | int(0) - 7)] | max }}"
     volume_mute:
-      action: "switch.turn_{{ 'on' if is_volume_muted else 'off' }}"
+      action: switch.toggle
       target:
         entity_id: switch.atelier_alsa_audio_atelier_alsa_audio_mute
     volume_set:
@@ -127,8 +127,8 @@ Because `VOLUME_SCALE=0_to_1` publishes the MQTT `number` entity directly on Hom
       target:
         entity_id: number.atelier_alsa_audio_atelier_alsa_audio_volume
       data:
-        value: "{{ volume_level }}"
+        value: "{{ (volume_level * 100) | round | int }}"
   attributes:
     is_volume_muted: switch.atelier_alsa_audio_atelier_alsa_audio_mute
-    volume_level: number.atelier_alsa_audio_atelier_alsa_audio_volume
+    volume_level: "{{ states('number.atelier_alsa_audio_atelier_alsa_audio_volume') | float(0) / 100.0 }}"
 ```
