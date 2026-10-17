@@ -88,6 +88,7 @@ ALSA_RAW_0DB = 245   # 0.00 dB
 def detect_alsa_capabilities():
     """Inspect ALSA control capabilities via amixer to determine curve and hardware mute support."""
     has_pswitch = False
+    has_db = False
     raw_max = 100
     try:
         out = subprocess.check_output(
@@ -95,6 +96,8 @@ def detect_alsa_capabilities():
         )
         if "pswitch" in out:
             has_pswitch = True
+        if "dB" in out:
+            has_db = True
         m = re.search(r"Limits:\s+(?:Playback\s+)?\d+\s*-\s*(\d+)", out)
         if m:
             raw_max = int(m.group(1))
@@ -102,16 +105,16 @@ def detect_alsa_capabilities():
         logger.warning(f"Could not inspect ALSA capabilities via amixer: {e}")
 
     if ALSA_VOLUME_CURVE == "auto":
-        if raw_max == 255 and not has_pswitch:
+        if raw_max == 255 and not has_pswitch and not has_db:
             curve = "bcm2835"
         else:
-            curve = "native"
+            curve = "mapped"
     else:
         curve = ALSA_VOLUME_CURVE
 
     logger.info(
         f"ALSA card={ALSA_CARD} control='{ALSA_CONTROL}': raw_max={raw_max}, "
-        f"has_pswitch={has_pswitch}, selected_curve='{curve}'"
+        f"has_pswitch={has_pswitch}, has_db={has_db}, selected_curve='{curve}'"
     )
     return curve, has_pswitch, raw_max
 
@@ -187,6 +190,22 @@ class VolumeBridge:
             except Exception as e:
                 logger.error(f"Failed to read bcm2835 ALSA raw volume: {e}")
             return self.current_volume_pct, self.is_muted
+        elif CURVE_MODE in ("mapped", "alsamixer"):
+            try:
+                out = subprocess.check_output(
+                    ["amixer", "-M", "-c", str(ALSA_CARD), "sget", ALSA_CONTROL], text=True
+                )
+                m = re.search(r"\[(\d+)%\]", out)
+                pct = int(m.group(1)) if m else self.current_volume_pct
+                muted = False
+                if HAS_HW_MUTE:
+                    muted = "[off]" in out
+                else:
+                    muted = (pct == 0)
+                return pct, muted
+            except Exception as e:
+                logger.error(f"Failed to read mapped ALSA volume: {e}")
+                return self.current_volume_pct, self.is_muted
         else:
             try:
                 mixer = alsaaudio.Mixer(control=ALSA_CONTROL, cardindex=ALSA_CARD)
@@ -219,6 +238,27 @@ class VolumeBridge:
                 )
             except Exception as e:
                 logger.error(f"Failed to set bcm2835 ALSA raw volume to {raw}: {e}")
+        elif CURVE_MODE in ("mapped", "alsamixer"):
+            try:
+                if HAS_HW_MUTE:
+                    if mute:
+                        subprocess.run(
+                            ["amixer", "-M", "-q", "-c", str(ALSA_CARD), "sset", ALSA_CONTROL, "mute"],
+                            check=True,
+                        )
+                    else:
+                        subprocess.run(
+                            ["amixer", "-M", "-q", "-c", str(ALSA_CARD), "sset", ALSA_CONTROL, f"{int(pct)}%", "unmute"],
+                            check=True,
+                        )
+                else:
+                    val_str = "0%" if mute else f"{int(pct)}%"
+                    subprocess.run(
+                        ["amixer", "-M", "-q", "-c", str(ALSA_CARD), "sset", ALSA_CONTROL, val_str],
+                        check=True,
+                    )
+            except Exception as e:
+                logger.error(f"Failed to set mapped ALSA volume (pct={pct}, mute={mute}): {e}")
         else:
             try:
                 mixer = alsaaudio.Mixer(control=ALSA_CONTROL, cardindex=ALSA_CARD)
